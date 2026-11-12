@@ -6,6 +6,8 @@ A single-file WebXR scene for practising **English restaurant ordering**: you st
 
 No build step, no server, no dependencies to install beyond the CDN copy of three.js. One HTML file.
 
+![The Royal Oak running in a browser: the pub interior, Oliver behind the counter, and the floating dialogue panel](docs/preview.png)
+
 ---
 
 ## What it does
