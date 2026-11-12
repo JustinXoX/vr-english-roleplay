@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Royal Oak - VR English Role-Play</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1a120b;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    // =========================================================================
+    // 1. PROCEDURAL TEXTURES (Wood, Wall, Chalkboard Menu)
+    // =========================================================================
+    function createWoodTexture(baseColor = '#5c3a21', grainColor = '#3e2412', planks = 8) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 512, 512);
+
+      const plankHeight = 512 / planks;
+      for (let i = 0; i < planks; i++) {
+        const y = i * plankHeight;
+        // Subtle tone variation per plank
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)';
+        ctx.fillRect(0, y, 512, plankHeight);
+
+        // Wood grain streaks
+        ctx.strokeStyle = grainColor;
+        ctx.lineWidth = 1.2;
+        for (let g = 0; g < 18; g++) {
+          ctx.beginPath();
+          const gy = y + (g / 18) * plankHeight;
+          ctx.moveTo(0, gy);
+          ctx.bezierCurveTo(170, gy + Math.sin(g + i) * 3, 340, gy - Math.cos(g) * 3, 512, gy);
+          ctx.stroke();
+        }
+
+        // Plank seam
+        ctx.fillStyle = '#231308';
+        ctx.fillRect(0, y, 512, 2);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    function createWallTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Warm cream upper plaster
+      ctx.fillStyle = '#e8dcc5';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Subtle plaster noise
+      for (let i = 0; i < 2000; i++) {
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(130,110,85,0.05)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 3);
+      }
+
+      // Classic vertical stripes wallpaper accent
+      ctx.fillStyle = 'rgba(176, 148, 108, 0.14)';
+      for (let x = 0; x < 512; x += 32) {
+        ctx.fillRect(x, 0, 12, 512);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(4, 1);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    function createMenuBoardTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 640;
+      const ctx = canvas.getContext('2d');
+
+      // Chalkboard slate background
+      ctx.fillStyle = '#1e2723';
+      ctx.fillRect(0, 0, 1024, 640);
+
+      // Subtle chalk dust smudge
+      const grad = ctx.createRadialGradient(512, 320, 60, 512, 320, 500);
+      grad.addColorStop(0, 'rgba(255,255,255,0.06)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.25)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 640);
+
+      // Decorative double border
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(20, 20, 984, 600);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(32, 32, 960, 576);
+
+      // Header
+      ctx.fillStyle = '#f5d77f';
+      ctx.font = 'bold 46px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('THE ROYAL OAK — MENU', 512, 95);
+
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(180, 118);
+      ctx.lineTo(844, 118);
+      ctx.stroke();
+
+      // Left Column: Main Courses
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#9be0b5';
+      ctx.font = 'bold 34px Georgia, serif';
+      ctx.fillText('MAIN COURSES', 75, 180);
+
+      const mains = [
+        { name: 'Fish & Chips', desc: 'Beer-battered cod, mushy peas', price: '£11.50' },
+        { name: "Shepherd's Pie", desc: 'Minced lamb & golden mash', price: '£10.50' },
+        { name: 'Full English', desc: 'Eggs, bacon, sausage, beans', price: '£12.00' }
+      ];
+
+      mains.forEach((item, idx) => {
+        const y = 240 + idx * 115;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px Arial, sans-serif';
+        ctx.fillText(item.name, 75, y);
+
+        ctx.fillStyle = '#f5d77f';
+        ctx.textAlign = 'right';
+        ctx.fillText(item.price, 485, y);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#cbd5d0';
+        ctx.font = '22px Arial, sans-serif';
+        ctx.fillText(item.desc, 75, y + 32);
+      });
+
+      // Vertical Divider
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath();
+      ctx.moveTo(525, 155);
+      ctx.lineTo(525, 575);
+      ctx.stroke();
+
+      // Right Column: Drinks
+      ctx.fillStyle = '#9be0b5';
+      ctx.font = 'bold 34px Georgia, serif';
+      ctx.fillText('DRINKS', 565, 180);
+
+      const drinks = [
+        { name: 'Earl Grey Tea', desc: 'Classic pot with bergamot', price: '£3.00' },
+        { name: 'Apple Juice', desc: 'Pressed English orchard apples', price: '£3.50' },
+        { name: 'Tap Water', desc: 'Chilled still water', price: 'FREE' }
+      ];
+
+      drinks.forEach((item, idx) => {
+        const y = 240 + idx * 115;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px Arial, sans-serif';
+        ctx.fillText(item.name, 565, y);
+
+        ctx.fillStyle = '#f5d77f';
+        ctx.textAlign = 'right';
+        ctx.fillText(item.price, 945, y);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#cbd5d0';
+        ctx.font = '22px Arial, sans-serif';
+        ctx.fillText(item.desc, 565, y + 32);
+      });
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    // =========================================================================
+    // 2. SCENE, RENDERER & WEBXR PLAYER RIG SETUP
+    // =========================================================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1f1610);
+    scene.fog = new THREE.FogExp2(0x1f1610, 0.045);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    // WebXR Core Configuration
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(VRButton.createButton(renderer));
+
+    // PlayerRig wrapping camera so player stands naturally in front of counter
+    const playerRig = new THREE.Group();
+    playerRig.position.set(0, 0, 1.85);
+    scene.add(playerRig);
+
+    const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 40);
+    // Desktop eye height = 1.6m; WebXR local-floor overrides camera local Y automatically
+    camera.position.set(0, 1.6, 0);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.x = -0.06;
+    playerRig.add(camera);
+
+    renderer.xr.addEventListener('sessionstart', () => {
+      camera.position.set(0, 0, 0);
+      camera.rotation.set(0, 0, 0);
+    });
+
+    renderer.xr.addEventListener('sessionend', () => {
+      camera.position.set(0, 1.6, 0);
+      camera.rotation.set(-0.06, 0, 0);
+    });
+
+    // =========================================================================
+    // 3. COZY BRITISH RESTAURANT ENVIRONMENT & WARM LIGHTING
+    // =========================================================================
+    const floorTex = createWoodTexture('#6b4423', '#422711', 10);
+    floorTex.repeat.set(6, 6);
+    const darkWoodTex = createWoodTexture('#3b2212', '#221208', 6);
+    const wallTex = createWallTexture();
+
+    // Lighting
+    const hemiLight = new THREE.HemisphereLight(0xffe8c2, 0x3b2618, 0.65);
+    scene.add(hemiLight);
+
+    // Main warm chandelier light above counter
+    const counterLight = new THREE.PointLight(0xffb86c, 4.5, 10, 1.4);
+    counterLight.position.set(0, 2.75, 0.2);
+    counterLight.castShadow = true;
+    counterLight.shadow.mapSize.set(1024, 1024);
+    scene.add(counterLight);
+
+    // Warm accent lights over dining tables
+    const leftTableLight = new THREE.PointLight(0xffaa55, 3.0, 8, 1.5);
+    leftTableLight.position.set(-2.3, 2.5, 1.1);
+    scene.add(leftTableLight);
+
+    const rightTableLight = new THREE.PointLight(0xffaa55, 3.0, 8, 1.5);
+    rightTableLight.position.set(2.3, 2.5, 1.1);
+    scene.add(rightTableLight);
+
+    // Soft front fill light for staff & spatial UI readability
+    const fillLight = new THREE.DirectionalLight(0xfff1dc, 0.75);
+    fillLight.position.set(1.5, 3.0, 3.0);
+    scene.add(fillLight);
+
+    // Room Structure
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(9, 9),
+      new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.65, metalness: 0.05 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const ceiling = new THREE.Mesh(
+      new THREE.PlaneGeometry(9, 9),
+      new THREE.MeshStandardMaterial({ color: 0x2b1b10, roughness: 0.9 })
+    );
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = 3.5;
+    scene.add(ceiling);
+
+    // Walls & Dark Wood Wainscoting
+    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85 });
+    const wainscotMat = new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.55 });
+
+    function buildWall(w, h, x, y, z, rotY) {
+      const group = new THREE.Group();
+      const upper = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+      upper.position.y = h / 2;
+      upper.receiveShadow = true;
+      group.add(upper);
+
+      const lower = new THREE.Mesh(new THREE.BoxGeometry(w, 1.05, 0.06), wainscotMat);
+      lower.position.set(0, 0.525, 0.02);
+      lower.receiveShadow = true;
+      group.add(lower);
+
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.09), wainscotMat);
+      trim.position.set(0, 1.06, 0.03);
+      group.add(trim);
+
+      group.position.set(x, y, z);
+      group.rotation.y = rotY;
+      scene.add(group);
+    }
+
+    buildWall(9, 3.5, 0, 0, -2.5, 0);              // Back wall
+    buildWall(9, 3.5, -4.5, 0, 2.0, Math.PI / 2);  // Left wall
+    buildWall(9, 3.5, 4.5, 0, 2.0, -Math.PI / 2);  // Right wall
+    buildWall(9, 3.5, 0, 0, 6.5, Math.PI);         // Behind player
+
+    // Wall Menu Board behind counter
+    const menuGroup = new THREE.Group();
+    const menuFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(2.3, 1.46, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x2c180c, roughness: 0.45 })
+    );
+    menuGroup.add(menuFrame);
+
+    const menuBoard = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.16, 1.34),
+      new THREE.MeshStandardMaterial({ map: createMenuBoardTexture(), roughness: 0.75 })
+    );
+    menuBoard.position.z = 0.045;
+    menuGroup.add(menuBoard);
+
+    menuGroup.position.set(0, 2.15, -2.42);
+    scene.add(menuGroup);
+
+    // Service Counter
+    const counterGroup = new THREE.Group();
+    const counterBody = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 1.0, 0.8),
+      new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.5 })
+    );
+    counterBody.position.y = 0.5;
+    counterBody.castShadow = true;
+    counterBody.receiveShadow = true;
+    counterGroup.add(counterBody);
+
+    // Decorative front panels on counter
+    for (let px = -1.05; px <= 1.05; px += 1.05) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.88, 0.72, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x4d2c16, roughness: 0.45 })
+      );
+      panel.position.set(px, 0.52, 0.41);
+      counterGroup.add(panel);
+    }
+
+    // Marble / Granite Countertop
+    const counterTop = new THREE.Mesh(
+      new THREE.BoxGeometry(3.34, 0.07, 0.92),
+      new THREE.MeshStandardMaterial({ color: 0xded8ce, roughness: 0.25, metalness: 0.08 })
+    );
+    counterTop.position.y = 1.035;
+    counterTop.castShadow = true;
+    counterTop.receiveShadow = true;
+    counterGroup.add(counterTop);
+
+    // Brass Footrail
+    const footRail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, 3.1, 16),
+      new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.25 })
+    );
+    footRail.rotation.z = Math.PI / 2;
+    footRail.position.set(0, 0.16, 0.52);
+    counterGroup.add(footRail);
+
+    // Counter Props: Vintage Cash Register & Pastry Cloche
+    const registerBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.24, 0.32),
+      new THREE.MeshStandardMaterial({ color: 0xb8860b, metalness: 0.75, roughness: 0.3 })
+    );
+    registerBase.position.set(-1.1, 1.19, 0.05);
+    counterGroup.add(registerBase);
+
+    const plate = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.2, 0.03, 24),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 })
+    );
+    plate.position.set(1.15, 1.085, 0.05);
+    counterGroup.add(plate);
+
+    const cloche = new THREE.Mesh(
+      new THREE.SphereGeometry(0.19, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.32,
+        roughness: 0.1,
+        transmission: 0.5
+      })
+    );
+    cloche.position.set(1.15, 1.1, 0.05);
+    counterGroup.add(cloche);
+
+    counterGroup.position.set(0, 0, 0);
+    scene.add(counterGroup);
+
+    // Hanging Pendant Lamps
+    function createPendantLamp(x, y, z) {
+      const lamp = new THREE.Group();
+      const cord = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.01, 0.01, 3.5 - y, 8),
+        new THREE.MeshBasicMaterial({ color: 0x111111 })
+      );
+      cord.position.y = (3.5 - y) / 2;
+      lamp.add(cord);
+
+      const shade = new THREE.Mesh(
+        new THREE.ConeGeometry(0.22, 0.18, 24, 1, true),
+        new THREE.MeshStandardMaterial({
+          color: 0x1e4d36,
+          side: THREE.DoubleSide,
+          roughness: 0.35,
+          metalness: 0.3
+        })
+      );
+      lamp.add(shade);
+
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffdf9e })
+      );
+      bulb.position.y = -0.04;
+      lamp.add(bulb);
+
+      lamp.position.set(x, y, z);
+      scene.add(lamp);
+    }
+
+    createPendantLamp(-0.85, 2.55, 0.15);
+    createPendantLamp(0.85, 2.55, 0.15);
+    createPendantLamp(-2.3, 2.45, 1.1);
+    createPendantLamp(2.3, 2.45, 1.1);
+
+    // Dining Tables & Chairs
+    function createTableSet(x, z) {
+      const set = new THREE.Group();
+      const tableMat = new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.45 });
+
+      const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 28), tableMat);
+      tableTop.position.y = 0.76;
+      tableTop.castShadow = true;
+      tableTop.receiveShadow = true;
+      set.add(tableTop);
+
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.74, 16), tableMat);
+      pillar.position.y = 0.37;
+      set.add(pillar);
+
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.04, 20), tableMat);
+      base.position.y = 0.02;
+      set.add(base);
+
+      // Two Chairs per table
+      [-0.78, 0.78].forEach((offsetX) => {
+        const chair = new THREE.Group();
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.42), tableMat);
+        seat.position.y = 0.46;
+        seat.castShadow = true;
+        chair.add(seat);
+
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.48, 0.42), tableMat);
+        back.position.set(offsetX > 0 ? 0.185 : -0.185, 0.7, 0);
+        back.castShadow = true;
+        chair.add(back);
+
+        [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]].forEach(([lx, lz]) => {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.46, 8), tableMat);
+          leg.position.set(lx, 0.23, lz);
+          chair.add(leg);
+        });
+
+        chair.position.x = offsetX;
+        set.add(chair);
+      });
+
+      set.position.set(x, 0, z);
+      scene.add(set);
+    }
+
+    createTableSet(-2.3, 1.1);
+    createTableSet(2.3, 1.1);
+    createTableSet(-2.3, 3.1);
+    createTableSet(2.3, 3.1);
+
+    // =========================================================================
+    // 4. STYLIZED 3D VIRTUAL STAFF ("OLIVER") WITH ANIMATIONS
+    // =========================================================================
+    const staffGroup = new THREE.Group();
+    // Placed slightly left of center behind counter so the spatial UI sits cleanly beside him
+    staffGroup.position.set(-0.32, 0, -0.78);
+    scene.add(staffGroup);
+
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xf4c29f, roughness: 0.65 });
+    const shirtMat = new THREE.MeshStandardMaterial({ color: 0xf8f9fa, roughness: 0.7 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: 0x6b1d2f, roughness: 0.6 }); // British burgundy waistcoat
+    const apronMat = new THREE.MeshStandardMaterial({ color: 0x1f2d27, roughness: 0.75 });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x3b2314, roughness: 0.8 });
+
+    // Torso & Waistcoat
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.22, 0.62, 20), vestMat);
+    torso.position.y = 1.12;
+    torso.castShadow = true;
+    staffGroup.add(torso);
+
+    // White Shirt Collar & Front
+    const shirtFront = new THREE.Mesh(new THREE.CylinderGeometry(0.192, 0.195, 0.24, 16, 1, false, -0.5, 1.0), shirtMat);
+    shirtFront.position.y = 1.3;
+    staffGroup.add(shirtFront);
+
+    // Bow Tie
+    const bowLeft = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.06, 8), apronMat);
+    bowLeft.rotation.z = -Math.PI / 2;
+    bowLeft.position.set(-0.025, 1.39, 0.195);
+    staffGroup.add(bowLeft);
+
+    const bowRight = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.06, 8), apronMat);
+    bowRight.rotation.z = Math.PI / 2;
+    bowRight.position.set(0.025, 1.39, 0.195);
+    staffGroup.add(bowRight);
+
+    // Apron
+    const apron = new THREE.Mesh(new THREE.CylinderGeometry(0.222, 0.24, 0.55, 16, 1, false, -1.1, 2.2), apronMat);
+    apron.position.y = 0.85;
+    staffGroup.add(apron);
+
+    // Neck
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.12, 14), skinMat);
+    neck.position.y = 1.46;
+    staffGroup.add(neck);
+
+    // Articulated Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.62, 0);
+    staffGroup.add(headGroup);
+
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.165, 24, 24), skinMat);
+    headMesh.scale.set(0.92, 1.05, 0.96);
+    headMesh.castShadow = true;
+    headGroup.add(headMesh);
+
+    // Hair
+    const hairTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.172, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.56),
+      hairMat
+    );
+    hairTop.scale.set(0.94, 1.05, 0.98);
+    hairTop.rotation.x = -0.18;
+    hairTop.position.y = 0.015;
+    headGroup.add(hairTop);
+
+    // Eyes & Eyebrows
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1c1c1c });
+    [-0.055, 0.055].forEach((ex) => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 12), eyeMat);
+      eye.position.set(ex, 0.02, 0.148);
+      headGroup.add(eye);
+
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.009, 0.012), hairMat);
+      brow.position.set(ex, 0.048, 0.148);
+      headGroup.add(brow);
+    });
+
+    // Nose
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 10), skinMat);
+    nose.rotation.x = Math.PI / 2.2;
+    nose.position.set(0, -0.005, 0.165);
+    headGroup.add(nose);
+
+    // Animated Mouth (scales vertically while speaking)
+    const mouthMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.052, 0.014, 0.015),
+      new THREE.MeshBasicMaterial({ color: 0x8f2d2d })
+    );
+    mouthMesh.position.set(0, -0.055, 0.148);
+    headGroup.add(mouthMesh);
+
+    // Articulated Left & Right Arms
+    function buildArm(isRight) {
+      const shoulderPivot = new THREE.Group();
+      shoulderPivot.position.set(isRight ? 0.24 : -0.24, 1.36, 0);
+
+      const upperSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.048, 0.28, 14), shirtMat);
+      upperSleeve.position.y = -0.14;
+      shoulderPivot.add(upperSleeve);
+
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.25, 14), skinMat);
+      forearm.position.set(0, -0.34, 0.06);
+      forearm.rotation.x = -0.45;
+      shoulderPivot.add(forearm);
+
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.044, 14, 14), skinMat);
+      hand.position.set(0, -0.44, 0.12);
+      shoulderPivot.add(hand);
+
+      staffGroup.add(shoulderPivot);
+      return shoulderPivot;
+    }
+
+    const leftArm = buildArm(false);
+    const rightArm = buildArm(true);
+
+    // Staff Animation State
+    const staffAnim = {
+      isSpeaking: false,
+      waveTimer: 2.8, // Wave automatically on scene start
+      nodTimer: 0
+    };
+
+    // =========================================================================
+    // 5. SPATIAL 3D FLOATING UI PANEL (THREE.Mesh + CanvasTexture)
+    // =========================================================================
+    const uiCanvas = document.createElement('canvas');
+    uiCanvas.width = 1024;
+    uiCanvas.height = 768;
+    const uiCtx = uiCanvas.getContext('2d');
+
+    const uiTexture = new THREE.CanvasTexture(uiCanvas);
+    uiTexture.colorSpace = THREE.SRGBColorSpace;
+    uiTexture.minFilter = THREE.LinearFilter;
+
+    // 1.18m x 0.885m floating spatial panel positioned comfortably above/beside counter
+    const uiPanelMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.18, 0.885),
+      new THREE.MeshBasicMaterial({ map: uiTexture, transparent: true })
+    );
+    uiPanelMesh.position.set(0.42, 1.42, 0.78);
+    uiPanelMesh.rotation.y = -0.30;
+    scene.add(uiPanelMesh);
+
+    // Interactive Button Registry (in canvas coordinates)
+    let uiButtons = [];
+    let hoveredButtonId = null;
+
+    // =========================================================================
+    // 6. ENGLISH ROLE-PLAY STATE MACHINE, SPEECH SYNTHESIS & SPEECH RECOGNITION
+    // =========================================================================
+    const roleplayState = {
+      stage: 0, // 0: Greeting/Dine-in, 1: Main Course, 2: Drink, 3: Checkout, 4: Completed
+      dineOption: '',
+      mainItem: null,
+      drinkItem: null,
+      paymentMethod: '',
+      isListening: false,
+      speechStatus: 'Tip: Click an option below or use the Mic button to speak.',
+      lastTranscript: ''
+    };
+
+    const STAGES = [
+      {
+        title: 'STAGE 1 / 3 — GREETING & DINING OPTION',
+        getStaffLine: () =>
+          'Good afternoon! Welcome to The Royal Oak. Would you like to eat in or take away?',
+        options: [
+          {
+            id: 'opt_eatin',
+            label: '1. "Eat in, please."',
+            keywords: ['eat in', 'here', 'dine', 'stay', 'inside'],
+            onSelect: () => {
+              roleplayState.dineOption = 'eat in';
+              advanceStage(1);
+            }
+          },
+          {
+            id: 'opt_takeaway',
+            label: '2. "Take away, please."',
+            keywords: ['take away', 'takeaway', 'take out', 'to go', 'out'],
+            onSelect: () => {
+              roleplayState.dineOption = 'take away';
+              advanceStage(1);
+            }
+          }
+        ]
+      },
+      {
+        title: 'STAGE 2A / 3 — CHOOSE YOUR MAIN COURSE',
+        getStaffLine: () =>
+          `Lovely! To ${roleplayState.dineOption}. What would you like for your main course?`,
+        options: [
+          {
+            id: 'opt_fish',
+            label: '1. "Fish and chips, please." (£11.50)',
+            keywords: ['fish', 'chips', 'cod'],
+            onSelect: () => {
+              roleplayState.mainItem = { name: 'Fish & Chips', price: 11.5 };
+              advanceStage(2);
+            }
+          },
+          {
+            id: 'opt_pie',
+            label: '2. "Shepherd\'s pie, please." (£10.50)',
+            keywords: ['shepherd', 'pie', 'lamb'],
+            onSelect: () => {
+              roleplayState.mainItem = { name: "Shepherd's Pie", price: 10.5 };
+              advanceStage(2);
+            }
+          },
+          {
+            id: 'opt_english',
+            label: '3. "Full English breakfast, please." (£12.00)',
+            keywords: ['english', 'breakfast', 'full'],
+            onSelect: () => {
+              roleplayState.mainItem = { name: 'Full English Breakfast', price: 12.0 };
+              advanceStage(2);
+            }
+          }
+        ]
+      },
+      {
+        title: 'STAGE 2B / 3 — CHOOSE YOUR DRINK',
+        getStaffLine: () =>
+          `Splendid choice! One ${roleplayState.mainItem.name}. And what would you like to drink?`,
+        options: [
+          {
+            id: 'opt_tea',
+            label: '1. "A pot of Earl Grey tea, please." (£3.00)',
+            keywords: ['tea', 'earl grey', 'earl', 'pot'],
+            onSelect: () => {
+              roleplayState.drinkItem = { name: 'Earl Grey Tea', price: 3.0 };
+              advanceStage(3);
+            }
+          },
+          {
+            id: 'opt_juice',
+            label: '2. "A glass of apple juice, please." (£3.50)',
+            keywords: ['apple', 'juice'],
+            onSelect: () => {
+              roleplayState.drinkItem = { name: 'Apple Juice', price: 3.5 };
+              advanceStage(3);
+            }
+          },
+          {
+            id: 'opt_water',
+            label: '3. "Just tap water, please." (Free)',
+            keywords: ['water', 'tap'],
+            onSelect: () => {
+              roleplayState.drinkItem = { name: 'Tap Water', price: 0.0 };
+              advanceStage(3);
+            }
+          }
+        ]
+      },
+      {
+        title: 'STAGE 3 / 3 — CONFIRMATION & CHECKOUT',
+        getStaffLine: () => {
+          const total = (roleplayState.mainItem.price + roleplayState.drinkItem.price).toFixed(2);
+          return `So that's ${roleplayState.mainItem.name} and ${roleplayState.drinkItem.name} to ${roleplayState.dineOption}. That comes to £${total}. How would you like to pay?`;
+        },
+        options: [
+          {
+            id: 'opt_card',
+            label: '1. "By card, please."',
+            keywords: ['card', 'credit', 'debit', 'contactless', 'tap'],
+            onSelect: () => {
+              roleplayState.paymentMethod = 'by card';
+              advanceStage(4);
+            }
+          },
+          {
+            id: 'opt_cash',
+            label: '2. "In cash, please."',
+            keywords: ['cash', 'money', 'notes', 'coins'],
+            onSelect: () => {
+              roleplayState.paymentMethod = 'in cash';
+              advanceStage(4);
+            }
+          }
+        ]
+      },
+      {
+        title: 'ORDER COMPLETE — WELL DONE!',
+        getStaffLine: () =>
+          `Thank you very much! Payment ${roleplayState.paymentMethod} received. Your order will be ready shortly. Enjoy your meal!`,
+        options: [
+          {
+            id: 'opt_restart',
+            label: 'Restart Role-Play Session',
+            keywords: ['restart', 'again', 'start'],
+            onSelect: () => {
+              roleplayState.dineOption = '';
+              roleplayState.mainItem = null;
+              roleplayState.drinkItem = null;
+              roleplayState.paymentMethod = '';
+              roleplayState.lastTranscript = '';
+              staffAnim.waveTimer = 2.5;
+              advanceStage(0);
+            }
+          }
+        ]
+      }
+    ];
+
+    // Subtle procedural UI click chime via Web Audio API
+    let audioCtx = null;
+    function playUIChime(freq = 620) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.25, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.11);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+      } catch (_) {}
+    }
+
+    // SpeechSynthesis (British English Voice)
+    let preferredVoice = null;
+    function loadVoices() {
+      if (!('speechSynthesis' in window)) return;
+      const voices = window.speechSynthesis.getVoices();
+      preferredVoice =
+        voices.find((v) => v.lang === 'en-GB' && v.name.includes('Male')) ||
+        voices.find((v) => v.lang === 'en-GB') ||
+        voices.find((v) => v.lang.startsWith('en')) ||
+        null;
+    }
+    if ('speechSynthesis' in window) {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function speakStaffLine(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.lang = 'en-GB';
+      utterance.rate = 0.96;
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        staffAnim.isSpeaking = true;
+      };
+      utterance.onend = () => {
+        staffAnim.isSpeaking = false;
+      };
+      utterance.onerror = () => {
+        staffAnim.isSpeaking = false;
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Web Speech API (SpeechRecognition)
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognitionAPI) {
+      recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'en-GB';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 3;
+
+      recognition.onstart = () => {
+        roleplayState.isListening = true;
+        roleplayState.speechStatus = 'Listening... Speak your answer in English!';
+        renderSpatialUI();
+      };
+
+      recognition.onresult = (event) => {
+        const transcripts = [];
+        for (let i = 0; i < event.results[0].length; i++) {
+          transcripts.push(event.results[0][i].transcript.toLowerCase().trim());
+        }
+        const primary = transcripts[0] || '';
+        roleplayState.lastTranscript = primary;
+
+        const currentStage = STAGES[roleplayState.stage];
+        let matchedOption = null;
+
+        for (const opt of currentStage.options) {
+          const hit = transcripts.some((t) => opt.keywords.some((kw) => t.includes(kw)));
+          if (hit) {
+            matchedOption = opt;
+            break;
+          }
+        }
+
+        if (matchedOption) {
+          roleplayState.speechStatus = `Matched: "${primary}"`;
+          playUIChime(740);
+          matchedOption.onSelect();
+        } else {
+          roleplayState.speechStatus = `Heard "${primary}" — didn't match. Try again or click an option.`;
+          renderSpatialUI();
+        }
+      };
+
+      recognition.onerror = (event) => {
+        roleplayState.isListening = false;
+        roleplayState.speechStatus = `Mic notice (${event.error}). You can use the option buttons anytime.`;
+        renderSpatialUI();
+      };
+
+      recognition.onend = () => {
+        roleplayState.isListening = false;
+        renderSpatialUI();
+      };
+    }
+
+    function toggleSpeechRecognition() {
+      if (!recognition) {
+        roleplayState.speechStatus =
+          'Speech recognition unavailable in this browser. Use the option buttons below.';
+        renderSpatialUI();
+        return;
+      }
+      if (roleplayState.isListening) {
+        recognition.stop();
+        return;
+      }
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      staffAnim.isSpeaking = false;
+      try {
+        recognition.start();
+      } catch (_) {
+        roleplayState.speechStatus = 'Microphone busy. Please click an option button below.';
+        renderSpatialUI();
+      }
+    }
+
+    function advanceStage(nextStageIndex) {
+      if (recognition && roleplayState.isListening) {
+        try {
+          recognition.stop();
+        } catch (_) {}
+      }
+      roleplayState.stage = nextStageIndex;
+      roleplayState.speechStatus = 'Click an option button or press Speak to answer by voice.';
+      staffAnim.nodTimer = 1.2;
+      renderSpatialUI();
+
+      const line = STAGES[nextStageIndex].getStaffLine();
+      speakStaffLine(line);
+    }
+
+    // =========================================================================
+    // 7. SPATIAL 3D UI RENDERING ENGINE (CANVAS TEXTURE)
+    // =========================================================================
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(' ');
+      let line = '';
+      let currentY = y;
+
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          ctx.fillText(line.trim(), x, currentY);
+          line = words[n] + ' ';
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line.trim(), x, currentY);
+      return currentY;
+    }
+
+    function renderSpatialUI() {
+      const w = uiCanvas.width;
+      const h = uiCanvas.height;
+      uiButtons = [];
+
+      uiCtx.clearRect(0, 0, w, h);
+
+      // Main dark glass panel background
+      drawRoundRect(uiCtx, 12, 12, w - 24, h - 24, 32);
+      uiCtx.fillStyle = 'rgba(22, 18, 15, 0.92)';
+      uiCtx.fill();
+      uiCtx.lineWidth = 4;
+      uiCtx.strokeStyle = '#d4af37';
+      uiCtx.stroke();
+
+      const currentStage = STAGES[roleplayState.stage];
+
+      // Top Stage Pill
+      drawRoundRect(uiCtx, 42, 36, w - 84, 52, 14);
+      uiCtx.fillStyle = 'rgba(212, 175, 55, 0.18)';
+      uiCtx.fill();
+
+      uiCtx.fillStyle = '#f5d77f';
+      uiCtx.font = 'bold 24px Arial, sans-serif';
+      uiCtx.textAlign = 'left';
+      uiCtx.fillText(currentStage.title, 64, 70);
+
+      // Staff Dialogue Box
+      drawRoundRect(uiCtx, 42, 106, w - 84, 175, 20);
+      uiCtx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+      uiCtx.fill();
+      uiCtx.lineWidth = 2;
+      uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+      uiCtx.stroke();
+
+      uiCtx.fillStyle = '#9be0b5';
+      uiCtx.font = 'bold 22px Arial, sans-serif';
+      uiCtx.fillText('OLIVER (STAFF):', 68, 142);
+
+      uiCtx.fillStyle = '#ffffff';
+      uiCtx.font = '29px Georgia, serif';
+      wrapText(uiCtx, `"${currentStage.getStaffLine()}"`, 68, 184, w - 136, 38);
+
+      // Utility Control Row: Replay Audio & Voice Recognition Mic
+      const replayBtn = {
+        id: 'btn_replay',
+        x: 42,
+        y: 300,
+        w: 290,
+        h: 64,
+        onSelect: () => {
+          playUIChime(540);
+          speakStaffLine(currentStage.getStaffLine());
+        }
+      };
+      uiButtons.push(replayBtn);
+
+      const isReplayHover = hoveredButtonId === replayBtn.id;
+      drawRoundRect(uiCtx, replayBtn.x, replayBtn.y, replayBtn.w, replayBtn.h, 16);
+      uiCtx.fillStyle = isReplayHover ? '#3b5998' : '#26395e';
+      uiCtx.fill();
+      uiCtx.strokeStyle = isReplayHover ? '#8ab4f8' : '#4f73b8';
+      uiCtx.lineWidth = 2.5;
+      uiCtx.stroke();
+
+      uiCtx.fillStyle = '#ffffff';
+      uiCtx.font = 'bold 24px Arial, sans-serif';
+      uiCtx.textAlign = 'center';
+      uiCtx.fillText('Replay Staff Voice', replayBtn.x + replayBtn.w / 2, replayBtn.y + 40);
+
+      // Speak (Web Speech API) Button
+      const micBtn = {
+        id: 'btn_mic',
+        x: 352,
+        y: 300,
+        w: w - 394,
+        h: 64,
+        onSelect: () => {
+          playUIChime(660);
+          toggleSpeechRecognition();
+        }
+      };
+      uiButtons.push(micBtn);
+
+      const isMicHover = hoveredButtonId === micBtn.id;
+      drawRoundRect(uiCtx, micBtn.x, micBtn.y, micBtn.w, micBtn.h, 16);
+      if (roleplayState.isListening) {
+        uiCtx.fillStyle = '#b91c1c';
+        uiCtx.strokeStyle = '#fca5a5';
+      } else {
+        uiCtx.fillStyle = isMicHover ? '#15803d' : '#14532d';
+        uiCtx.strokeStyle = isMicHover ? '#86efac' : '#22c55e';
+      }
+      uiCtx.lineWidth = 2.5;
+      uiCtx.fill();
+      uiCtx.stroke();
+
+      uiCtx.fillStyle = '#ffffff';
+      uiCtx.fillText(
+        roleplayState.isListening ? 'Listening... (Click to Stop)' : 'Speak Answer (Web Speech Mic)',
+        micBtn.x + micBtn.w / 2,
+        micBtn.y + 40
+      );
+
+      // Speech Status Bar
+      uiCtx.textAlign = 'left';
+      uiCtx.fillStyle = roleplayState.isListening ? '#fca5a5' : '#cbd5e1';
+      uiCtx.font = '21px Arial, sans-serif';
+      uiCtx.fillText(roleplayState.speechStatus, 48, 402);
+
+      // Option Buttons (Always clickable via Mouse or VR Trigger)
+      const optCount = currentStage.options.length;
+      const startY = 428;
+      const gap = 18;
+      const btnHeight = optCount === 3 ? 84 : 96;
+
+      currentStage.options.forEach((opt, idx) => {
+        const bx = 42;
+        const by = startY + idx * (btnHeight + gap);
+        const bw = w - 84;
+        const bh = btnHeight;
+
+        uiButtons.push({
+          id: opt.id,
+          x: bx,
+          y: by,
+          w: bw,
+          h: bh,
+          onSelect: () => {
+            playUIChime(620);
+            opt.onSelect();
+          }
+        });
+
+        const isHovered = hoveredButtonId === opt.id;
+        drawRoundRect(uiCtx, bx, by, bw, bh, 18);
+        uiCtx.fillStyle = isHovered ? '#d4af37' : 'rgba(255, 255, 255, 0.1)';
+        uiCtx.fill();
+        uiCtx.lineWidth = isHovered ? 3.5 : 2;
+        uiCtx.strokeStyle = isHovered ? '#fff3b0' : 'rgba(212, 175, 55, 0.55)';
+        uiCtx.stroke();
+
+        uiCtx.fillStyle = isHovered ? '#1a120b' : '#ffffff';
+        uiCtx.font = 'bold 28px Arial, sans-serif';
+        uiCtx.textAlign = 'left';
+        uiCtx.fillText(opt.label, bx + 28, by + bh / 2 + 10);
+      });
+
+      uiTexture.needsUpdate = true;
+    }
+
+    renderSpatialUI();
+
+    // =========================================================================
+    // 8. DUAL INPUT INTERACTION: DESKTOP MOUSE & WEBXR CONTROLLERS
+    // =========================================================================
+    const raycaster = new THREE.Raycaster();
+    const pointerNDC = new THREE.Vector2(-99, -99);
+
+    // Laser cursor dot on the 3D panel
+    const cursorDot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.014, 20),
+      new THREE.MeshBasicMaterial({ color: 0xffe066, depthTest: false })
+    );
+    cursorDot.visible = false;
+    scene.add(cursorDot);
+
+    function evaluatePanelIntersection(ray) {
+      const intersects = ray.intersectObject(uiPanelMesh, false);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        cursorDot.visible = true;
+        cursorDot.position.copy(hit.point).addScaledVector(hit.face.normal, 0.004);
+        cursorDot.quaternion.copy(uiPanelMesh.quaternion);
+
+        const cx = hit.uv.x * uiCanvas.width;
+        const cy = (1 - hit.uv.y) * uiCanvas.height;
+
+        let foundId = null;
+        for (const btn of uiButtons) {
+          if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+            foundId = btn.id;
+            break;
+          }
+        }
+
+        if (foundId !== hoveredButtonId) {
+          hoveredButtonId = foundId;
+          renderSpatialUI();
+        }
+        return foundId;
+      } else {
+        cursorDot.visible = false;
+        if (hoveredButtonId !== null) {
+          hoveredButtonId = null;
+          renderSpatialUI();
+        }
+        return null;
+      }
+    }
+
+    function triggerHoveredButton() {
+      if (!hoveredButtonId) return false;
+      const btn = uiButtons.find((b) => b.id === hoveredButtonId);
+      if (btn && btn.onSelect) {
+        btn.onSelect();
+        return true;
+      }
+      return false;
+    }
+
+    // Desktop Mouse Look & Click Controls
+    let isPointerDown = false;
+    let pointerDownPos = { x: 0, y: 0 };
+    let didDragCamera = false;
+
+    window.addEventListener('pointerdown', (e) => {
+      if (renderer.xr.isPresenting) return;
+      isPointerDown = true;
+      didDragCamera = false;
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+
+      // Speak initial greeting on first user interaction if browser blocked autoplay speech
+      if (roleplayState.stage === 0 && !staffAnim.isSpeaking && !window._hasSpokenInitial) {
+        window._hasSpokenInitial = true;
+        speakStaffLine(STAGES[0].getStaffLine());
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (renderer.xr.isPresenting) return;
+
+      pointerNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointerNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      if (isPointerDown) {
+        const dx = e.clientX - pointerDownPos.x;
+        const dy = e.clientY - pointerDownPos.y;
+        if (Math.hypot(dx, dy) > 5) {
+          didDragCamera = true;
+        }
+        if (didDragCamera) {
+          camera.rotation.y -= e.movementX * 0.0025;
+          camera.rotation.x -= e.movementY * 0.0025;
+          camera.rotation.x = Math.max(-0.85, Math.min(0.85, camera.rotation.x));
+          camera.rotation.y = Math.max(-1.35, Math.min(1.35, camera.rotation.y));
+        }
+      }
+
+      raycaster.setFromCamera(pointerNDC, camera);
+      const hitId = evaluatePanelIntersection(raycaster);
+      document.body.style.cursor = hitId ? 'pointer' : isPointerDown ? 'grabbing' : 'grab';
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (renderer.xr.isPresenting) return;
+      if (isPointerDown && !didDragCamera) {
+        pointerNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointerNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointerNDC, camera);
+        evaluatePanelIntersection(raycaster);
+        triggerHoveredButton();
+      }
+      isPointerDown = false;
+      didDragCamera = false;
+      document.body.style.cursor = hoveredButtonId ? 'pointer' : 'grab';
+    });
+
+    // WebXR Controllers (Controller 0 & Controller 1)
+    const controllers = [];
+    const tempMatrix = new THREE.Matrix4();
+
+    function setupVRController(index) {
+      const controller = renderer.xr.getController(index);
+
+      // Laser pointer ray geometry
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -3.5)
+      ]);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xf5d77f });
+      const laserLine = new THREE.Line(lineGeo, lineMat);
+      laserLine.name = 'laser';
+      controller.add(laserLine);
+
+      controller.addEventListener('selectstart', () => {
+        if (roleplayState.stage === 0 && !staffAnim.isSpeaking && !window._hasSpokenInitial) {
+          window._hasSpokenInitial = true;
+          speakStaffLine(STAGES[0].getStaffLine());
+        }
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+        evaluatePanelIntersection(raycaster);
+        triggerHoveredButton();
+      });
+
+      playerRig.add(controller);
+      controllers.push(controller);
+    }
+
+    setupVRController(0);
+    setupVRController(1);
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // =========================================================================
+    // 9. ANIMATION LOOP (WEBXR & DESKTOP)
+    // =========================================================================
+    const clock = new THREE.Clock();
+
+    function render() {
+      const dt = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Virtual Staff Animations (Breathing, Waving, Nodding, Mouth Sync)
+      torso.position.y = 1.12 + Math.sin(elapsed * 2.2) * 0.008;
+
+      // Subtle look toward player
+      headGroup.rotation.y = Math.sin(elapsed * 0.7) * 0.08 + 0.14;
+
+      // Nodding animation when user makes a choice
+      if (staffAnim.nodTimer > 0) {
+        staffAnim.nodTimer -= dt;
+        headGroup.rotation.x = Math.sin(elapsed * 14) * 0.14;
+      } else {
+        headGroup.rotation.x = Math.sin(elapsed * 1.5) * 0.03;
+      }
+
+      // Waving animation on greeting / restart
+      if (staffAnim.waveTimer > 0) {
+        staffAnim.waveTimer -= dt;
+        rightArm.rotation.z = -2.4 + Math.sin(elapsed * 10) * 0.35;
+        rightArm.rotation.x = -0.25;
+      } else {
+        rightArm.rotation.z = THREE.MathUtils.lerp(rightArm.rotation.z, -0.12, dt * 5);
+        rightArm.rotation.x = THREE.MathUtils.lerp(rightArm.rotation.x, Math.sin(elapsed * 1.8) * 0.04, dt * 5);
+      }
+      leftArm.rotation.z = 0.12;
+      leftArm.rotation.x = -Math.sin(elapsed * 1.8) * 0.04;
+
+      // Mouth movement while SpeechSynthesis is speaking
+      if (staffAnim.isSpeaking) {
+        mouthMesh.scale.y = 1.0 + Math.abs(Math.sin(elapsed * 18)) * 2.4;
+      } else {
+        mouthMesh.scale.y = 1.0;
+      }
+
+      // 2. WebXR Controller Raycasting in VR Mode
+      if (renderer.xr.isPresenting) {
+        let anyHit = false;
+        for (const ctrl of controllers) {
+          tempMatrix.identity().extractRotation(ctrl.matrixWorld);
+          raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+          raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+          const intersects = raycaster.intersectObject(uiPanelMesh, false);
+          if (intersects.length > 0) {
+            evaluatePanelIntersection(raycaster);
+            anyHit = true;
+            break;
+          }
+        }
+        if (!anyHit) {
+          cursorDot.visible = false;
+          if (hoveredButtonId !== null) {
+            hoveredButtonId = null;
+            renderSpatialUI();
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    renderer.setAnimationLoop(render);
+  </script>
+</body>
+</html>
